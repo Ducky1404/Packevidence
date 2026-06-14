@@ -12,6 +12,7 @@ import os
 import math
 import threading
 import winsound
+import base64
 from datetime import datetime, date
 
 # Import các module nội bộ
@@ -21,7 +22,7 @@ from database import (
     init_db, login, get_order, get_order_items, update_order_status,
     save_video, log_video_action, search_videos, get_all_employees,
     get_stats_by_employee, add_employee, delete_employee,
-    reset_password, get_all_orders,
+    reset_password, get_all_orders, add_order, delete_order,
 )
 from barcode_detector import BarcodeDetector
 from video_recorder    import VideoRecorder
@@ -35,76 +36,131 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Khởi tạo CSDL lần đầu
-init_db()
+# Khởi tạo CSDL một lần duy nhất (cache_resource giữ kết quả xuyên suốt session)
+@st.cache_resource
+def _init_db_once():
+    init_db()
+
+_init_db_once()
 
 # ── CSS tùy chỉnh ────────────────────────────────────────────────────────────
 
 st.markdown("""
 <style>
-    /* Ẩn menu mặc định của Streamlit */
     #MainMenu, footer { visibility: hidden; }
     header { visibility: hidden; }
-
-    /* Giữ lại nút mở/đóng sidebar (khi sidebar đã thu gọn) */
     header button,
     [data-testid="collapsedControl"],
-    [data-testid="stSidebarCollapsedControl"] {
-        visibility: visible !important;
-    }
+    [data-testid="stSidebarCollapsedControl"] { visibility: visible !important; }
 
-    /* Màu chủ đạo */
     :root {
-        --green:  #1D9E75;
-        --green-light: #E1F5EE;
-        --red-light:   #FCEBEB;
-        --amber-light: #FAEEDA;
-        --blue-light:  #E6F1FB;
+        --green:        #1D9E75;
+        --green-dark:   #0a1f14;
+        --green-light:  #E8F5F0;
+        --red-light:    #FCEBEB;
+        --amber-light:  #FAEEDA;
+        --blue-light:   #EEF2FF;
+        --surface:      #FFFFFF;
+        --border:       #E5E7EB;
+        --text-pri:     #111827;
+        --text-sec:     #6B7280;
     }
 
-    /* Badge trạng thái */
-    .badge {
-        display: inline-block;
-        padding: 3px 10px;
-        border-radius: 12px;
-        font-size: 12px;
-        font-weight: 500;
+    /* ── SIDEBAR ─────────────────────────────── */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(175deg, #2d6a4f 0%, #40916c 100%) !important;
+        border-right: none;
     }
+    [data-testid="stSidebar"] .stMarkdown p,
+    [data-testid="stSidebar"] .stMarkdown span { color: rgba(255,255,255,0.88) !important; }
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3 { color: #ffffff !important; }
+    [data-testid="stSidebar"] hr  { border-color: rgba(255,255,255,0.18) !important; }
+    /* Chỉ style text của radio option, không đụng vào cấu trúc */
+    [data-testid="stSidebar"] [data-testid="stRadio"] label span {
+        color: rgba(255,255,255,0.85) !important;
+        font-size: 0.9rem;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label {
+        padding: 0.4rem 0.6rem;
+        border-radius: 8px;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+        background: rgba(255,255,255,0.12) !important;
+    }
+    [data-testid="stSidebar"] .stButton > button {
+        background: rgba(255,255,255,0.15) !important;
+        color: rgba(255,255,255,0.88) !important;
+        border: 1px solid rgba(255,255,255,0.2) !important;
+        border-radius: 8px !important;
+        transition: all 0.2s !important;
+    }
+    [data-testid="stSidebar"] .stButton > button:hover {
+        background: rgba(255,255,255,0.25) !important;
+        color: #ffffff !important;
+    }
+
+    /* ── PAGE HEADER BANNER ───────────────────── */
+    .page-header {
+        background: linear-gradient(135deg, #b7e4c7 0%, #d8f3dc 100%);
+        border-radius: 14px;
+        padding: 1.4rem 1.8rem;
+        margin-bottom: 1.6rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        border: 1px solid #a0d9b4;
+    }
+    .ph-icon  { font-size: 2rem; line-height: 1; flex-shrink: 0; }
+    .ph-title { color: #1a4731; margin: 0; font-size: 1.35rem; font-weight: 700; line-height: 1.2; }
+    .ph-sub   { color: #2d6a4f; margin: 0.15rem 0 0; font-size: 0.82rem; }
+
+    /* ── METRIC CARDS ─────────────────────────── */
+    .metric-row { display: flex; gap: 1rem; margin-bottom: 1.6rem; flex-wrap: wrap; }
+    .metric-card {
+        flex: 1; min-width: 140px;
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 1.1rem 1.3rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 14px rgba(0,0,0,0.05);
+        border: 1px solid var(--border);
+        display: flex; align-items: center; gap: 1rem;
+    }
+    .mc-icon {
+        width: 46px; height: 46px; border-radius: 11px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center; font-size: 1.4rem;
+    }
+    .mc-icon.green  { background: #c8f5df; }
+    .mc-icon.blue   { background: #c5dff8; }
+    .mc-icon.amber  { background: #fde8c0; }
+    .mc-icon.purple { background: #e2d9f3; }
+    .mc-val   { font-size: 1.65rem; font-weight: 700; color: var(--text-pri); line-height: 1.1; }
+    .mc-label { font-size: 0.78rem; color: var(--text-sec); margin-top: 0.15rem; }
+
+    /* ── BADGES ───────────────────────────────── */
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
     .badge-green  { background: var(--green-light); color: #0F6E56; }
-    .badge-blue   { background: var(--blue-light);  color: #185FA5; }
+    .badge-blue   { background: var(--blue-light);  color: #3730A3; }
     .badge-amber  { background: var(--amber-light); color: #854F0B; }
     .badge-red    { background: var(--red-light);   color: #A32D2D; }
 
-    /* Tiêu đề mã vận đơn */
-    .tracking-code {
-        font-family: monospace;
-        font-size: 20px;
-        font-weight: 700;
-        color: var(--green);
-    }
+    /* ── MISC ─────────────────────────────────── */
+    .tracking-code { font-family: monospace; font-size: 20px; font-weight: 700; color: var(--green); }
+    .info-box { background: #f8fffe; border: 1.5px solid var(--green); border-radius: 10px; padding: 12px 16px; margin: 8px 0; }
+    .warn-box { background: var(--amber-light); border: 1px solid #EF9F27; border-radius: 8px; padding: 10px 14px; color: #854F0B; }
+    .err-box  { background: var(--red-light);   border: 1px solid #F09595; border-radius: 8px; padding: 10px 14px; color: #A32D2D; }
 
-    /* Ô thông tin */
-    .info-box {
-        background: #f8fffe;
-        border: 1.5px solid var(--green);
-        border-radius: 10px;
-        padding: 12px 16px;
-        margin: 8px 0;
+    /* ── FOOTER ───────────────────────────────── */
+    .app-footer {
+        text-align: center;
+        padding: 2rem 0 0.5rem;
+        color: #9CA3AF;
+        font-size: 0.76rem;
+        border-top: 1px solid var(--border);
+        margin-top: 3rem;
     }
-    .warn-box {
-        background: var(--amber-light);
-        border: 1px solid #EF9F27;
-        border-radius: 8px;
-        padding: 10px 14px;
-        color: #854F0B;
-    }
-    .err-box {
-        background: var(--red-light);
-        border: 1px solid #F09595;
-        border-radius: 8px;
-        padding: 10px 14px;
-        color: #A32D2D;
-    }
+    .app-footer strong { color: #6B7280; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -120,38 +176,41 @@ def _beep(freq: int = 1000, duration: int = 200):
 
 def ss_init():
     defaults = {
-        "logged_in":          False,
-        "user":               None,
-        "detector":           None,
-        "recorder":           VideoRecorder(),
-        "cap":                None,
-        "camera_index":       0,
-        "camera_list":        None,
-        "current_code":       None,
-        "current_order":      None,
-        "scan_count":         0,
+        "logged_in":            False,
+        "user":                 None,
+        "detector":             None,
+        "cap":                  None,
+        "camera_index":         0,
+        "camera_list":          None,
+        "current_code":         None,
+        "current_order":        None,
+        "scan_count":           0,
         "recording_start_time": 0.0,
-        "session_packed":     0,
-        "alerts":             [],
-        "pending_scan":       None,
+        "session_packed":       0,
+        "alerts":               [],
+        "pending_scan":         None,
+        "confirm_delete_order": None,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
+    # Khởi tạo riêng để tránh tạo VideoRecorder() mỗi lần rerun
+    if "recorder" not in st.session_state:
+        st.session_state["recorder"] = VideoRecorder()
 
 ss_init()
 
 
-def get_available_cameras(max_index=6):
+def get_available_cameras(max_index=10):
     """Quét và trả về danh sách camera có sẵn {tên: index}."""
     cameras = {}
     for i in range(max_index):
-        # Thử default backend trước, nếu không được thì thử DSHOW
-        cap = cv2.VideoCapture(i)
+        # Thử DSHOW trước (nhanh hơn trên Windows), fallback sang default backend
+        cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
         if not cap.isOpened():
-            cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+            cap = cv2.VideoCapture(i)
         if cap.isOpened():
-            label = f"Camera {i}" + (" — mặc định" if i == 0 else " — thiết bị ngoài")
+            label = f"Camera {i}" + (" — mặc định" if i == 0 else f" — thiết bị {i}")
             cameras[label] = i
             cap.release()
     return cameras or {"Camera 0 — mặc định": 0}
@@ -197,12 +256,78 @@ def _camera_fragment():
 #  MÀN HÌNH ĐĂNG NHẬP
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def render_page_header(icon: str, title: str, subtitle: str = ""):
+    sub = f'<p class="ph-sub">{subtitle}</p>' if subtitle else ""
+    st.markdown(f"""
+    <div class="page-header">
+        <div class="ph-icon">{icon}</div>
+        <div><p class="ph-title">{title}</p>{sub}</div>
+    </div>""", unsafe_allow_html=True)
+
+
+def render_metrics(*cards):
+    """cards: (icon, value, label, color) — color: green|blue|amber|purple"""
+    inner = "".join(f"""
+        <div class="metric-card">
+            <div class="mc-icon {c}">{ic}</div>
+            <div><div class="mc-val">{v}</div><div class="mc-label">{lb}</div></div>
+        </div>""" for ic, v, lb, c in cards)
+    st.markdown(f'<div class="metric-row">{inner}</div>', unsafe_allow_html=True)
+
+
+def render_footer():
+    st.markdown("""
+    <div class="app-footer">
+        © 2025 <strong>PackEvidence</strong> &nbsp;·&nbsp;
+        Phát triển bởi <strong>Đào Minh Đức</strong>
+    </div>""", unsafe_allow_html=True)
+
+
+@st.cache_data
+def _load_login_bg() -> str:
+    bg_path = os.path.join(os.path.dirname(__file__), "image source", "login bg.png")
+    with open(bg_path, "rb") as f:
+        return base64.b64encode(f.read()).decode()
+
+
 def page_login():
-    col1, col2, col3 = st.columns([1, 1.2, 1])
+    _b64 = _load_login_bg()
+
+    st.markdown(f"""
+    <style>
+    [data-testid="stSidebar"] {{ display: none !important; }}
+    [data-testid="stSidebarCollapsedControl"] {{ display: none !important; }}
+    [data-testid="stAppViewContainer"] {{
+        background-image: url("data:image/png;base64,{_b64}");
+        background-size: cover;
+        background-position: center center;
+        background-repeat: no-repeat;
+        min-height: 100vh;
+    }}
+    [data-testid="block-container"] {{
+        padding-top: 12vh !important;
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+        max-width: 100% !important;
+    }}
+    [data-testid="stForm"] {{
+        background: white !important;
+        border-radius: 14px !important;
+        padding: 2rem !important;
+        box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12) !important;
+        border: 1px solid #e0e0e0 !important;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+
+    _, col2 = st.columns([1.4, 1])
     with col2:
-        st.markdown("## 📦 PackEvidence")
-        st.markdown("**Hệ thống giám sát đóng gói hàng hóa**")
-        st.divider()
+        st.markdown("""
+        <div style="margin-bottom: 1.2rem;">
+            <h2 style="color:#0f3b2b; margin:0 0 0.3rem; font-size:1.7rem; font-weight:700;">Đăng nhập</h2>
+            <p style="color:#555; margin:0; font-size:0.9rem;">Vui lòng nhập thông tin để tiếp tục</p>
+        </div>
+        """, unsafe_allow_html=True)
 
         with st.form("login_form"):
             username = st.text_input("Tên đăng nhập", placeholder="Nhập username…")
@@ -227,24 +352,44 @@ def page_login():
 
 def render_sidebar():
     user = st.session_state.user
+    role_label = "Quản trị viên" if user["role"] == "admin" else "Nhân viên"
+    role_icon  = "👑" if user["role"] == "admin" else "👤"
     with st.sidebar:
-        st.markdown(f"### 👤 {user['full_name']}")
-        st.caption(f"{user['employee_code'] or 'Admin'} • {user['role'].capitalize()}")
+        st.markdown(f"""
+        <div style="text-align:center;padding:1.8rem 0 1.2rem;">
+            <div style="font-size:2.8rem;line-height:1;">📦</div>
+            <div style="color:#ffffff;font-weight:700;font-size:1.1rem;margin-top:0.4rem;letter-spacing:-0.3px;">PackEvidence</div>
+            <div style="color:rgba(255,255,255,0.4);font-size:0.72rem;margin-top:0.1rem;">Hệ thống giám sát đóng gói</div>
+        </div>""", unsafe_allow_html=True)
+
         st.divider()
 
+        st.markdown(f"""
+        <div style="display:flex;align-items:center;gap:0.75rem;padding:0.4rem 0 1.1rem;">
+            <div style="width:38px;height:38px;border-radius:50%;background:rgba(29,158,117,0.25);
+                        display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;">
+                {role_icon}
+            </div>
+            <div>
+                <div style="color:#ffffff;font-weight:600;font-size:0.88rem;line-height:1.3;">{user['full_name']}</div>
+                <div style="color:rgba(255,255,255,0.45);font-size:0.72rem;">{user['employee_code'] or 'Admin'} · {role_label}</div>
+            </div>
+        </div>""", unsafe_allow_html=True)
+
         if user["role"] == "employee":
-            page = st.radio("Chức năng", [
+            page = st.radio("Menu", [
                 "📷 Quét & ghi hình",
                 "📋 Đơn hàng",
                 "📊 Ca làm việc",
-            ])
+            ], label_visibility="collapsed")
         else:
-            page = st.radio("Chức năng", [
+            page = st.radio("Menu", [
                 "📊 Dashboard admin",
+                "📋 Đơn hàng",
                 "🎥 Quản lý video",
                 "👥 Nhân viên",
                 "📈 Thống kê",
-            ])
+            ], label_visibility="collapsed")
 
         st.divider()
         if st.button("🚪 Đăng xuất", use_container_width=True):
@@ -272,7 +417,7 @@ def _logout():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def page_scan():
-    st.markdown("### 📷 Quét mã vận đơn & ghi hình")
+    render_page_header("📷", "Quét & Ghi hình", "Quét mã vận đơn để bắt đầu ghi hình bằng chứng")
 
     # ── Chọn camera ─────────────────────────────────────────────────────────
     if st.session_state.camera_list is None:
@@ -336,17 +481,26 @@ def page_scan():
 
         st.divider()
         st.markdown("#### Điều khiển ghi hình")
-        ctrl_col1, ctrl_col2 = st.columns(2)
-        with ctrl_col1:
-            manual_start = st.button("▶ Bắt đầu ghi", use_container_width=True)
-        with ctrl_col2:
-            manual_stop = st.button("⏹ Dừng ghi", use_container_width=True)
-
-        if manual_start and not st.session_state.recorder.is_recording:
-            if st.session_state.current_code:
-                _start_recording()
-        if manual_stop and st.session_state.recorder.is_recording:
-            _stop_and_save()
+        rec = st.session_state.recorder
+        if rec.is_recording:
+            elapsed = int(rec.elapsed_seconds)
+            mm, ss  = divmod(elapsed, 60)
+            st.markdown(
+                f"<div style='background:#fff0f0;border:1.5px solid #e57373;border-radius:8px;"
+                f"padding:0.5rem 0.85rem;margin-bottom:0.6rem;font-size:0.85rem;color:#c62828;'>"
+                f"🔴 Đang ghi &nbsp;—&nbsp; {mm:02d}:{ss:02d}</div>",
+                unsafe_allow_html=True
+            )
+            if st.button("⏹ Dừng ghi thủ công", use_container_width=True, type="primary"):
+                _stop_and_save()
+                st.rerun()
+        else:
+            st.markdown(
+                "<div style='background:#f5f5f5;border:1px solid #e0e0e0;border-radius:8px;"
+                "padding:0.5rem 0.85rem;margin-bottom:0.6rem;font-size:0.85rem;color:#9e9e9e;'>"
+                "⬜ Chưa ghi — quét mã để bắt đầu</div>",
+                unsafe_allow_html=True
+            )
 
         st.divider()
         st.metric("Kiện đã đóng ca này", st.session_state.session_packed)
@@ -384,7 +538,6 @@ def _handle_scan_result(code: str):
         st.session_state.current_code  = code
         st.session_state.current_order = order
         st.session_state.scan_count    = 1
-        update_order_status(code, "packing")
         _start_recording()
 
     else:
@@ -494,37 +647,94 @@ def _render_order_info():
         st.warning("⚠️ Còn sản phẩm chưa kiểm tra.")
 
 
+def _render_delete_order_btn(o: dict):
+    """Hiển thị nút Xóa kèm bước xác nhận trước khi thực hiện."""
+    oid = o["order_id"]
+    if st.session_state.confirm_delete_order == oid:
+        st.warning(f"Xóa đơn **{o['tracking_code']}**? Thao tác không thể hoàn tác.")
+        c1, c2 = st.columns(2)
+        if c1.button("✅ Xác nhận xóa", key=f"conf_{oid}", type="primary"):
+            delete_order(oid)
+            st.session_state.confirm_delete_order = None
+            st.rerun()
+        if c2.button("❌ Hủy", key=f"cancel_{oid}"):
+            st.session_state.confirm_delete_order = None
+            st.rerun()
+    else:
+        if st.button("🗑 Xóa", key=f"del_{oid}", type="secondary"):
+            st.session_state.confirm_delete_order = oid
+            st.rerun()
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
-#  TRANG: QUẢN LÝ ĐƠN HÀNG (Nhân viên)
+#  TRANG: QUẢN LÝ ĐƠN HÀNG (Nhân viên + Admin)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def page_orders():
-    st.markdown("### 📋 Danh sách đơn hàng")
+    render_page_header("📋", "Đơn hàng", "Danh sách đơn hàng cần xử lý")
+
+    is_admin = st.session_state.user["role"] == "admin"
+
+    # ── Thêm đơn hàng (admin) ───────────────────────────────────────────────
+    if is_admin:
+        with st.expander("➕ Thêm đơn hàng mới"):
+            with st.form("add_order_form", clear_on_submit=True):
+                c1, c2, c3 = st.columns(3)
+                new_code     = c1.text_input("Mã vận đơn *")
+                new_customer = c2.text_input("Khách hàng")
+                new_platform = c3.selectbox("Sàn", ["Shopee", "Lazada", "TikTok", "Khác"])
+                products_raw = st.text_area(
+                    "Sản phẩm (mỗi dòng 1 sản phẩm)",
+                    height=100,
+                    placeholder="Áo thun nam oversize\nQuần short kaki\n...",
+                )
+                if st.form_submit_button("Thêm đơn hàng", type="primary"):
+                    if not new_code.strip():
+                        st.warning("Vui lòng nhập mã vận đơn.")
+                    else:
+                        products = [p for p in products_raw.splitlines() if p.strip()]
+                        ok, msg  = add_order(new_code, new_customer, new_platform, products)
+                        if ok:
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(msg)
+
+    # ── Bộ lọc ──────────────────────────────────────────────────────────────
+    f1, f2 = st.columns([3, 1])
+    q_code     = f1.text_input("🔍 Tìm mã vận đơn", placeholder="Nhập một phần mã...")
+    q_platform = f2.selectbox("Lọc theo sàn", ["Tất cả", "Shopee", "Lazada", "TikTok", "Khác"])
 
     orders = get_all_orders()
-    pending = [o for o in orders if o["status"] in ("pending", "packing")]
+    if q_code:
+        orders = [o for o in orders if q_code.upper() in o["tracking_code"].upper()]
+    if q_platform != "Tất cả":
+        orders = [o for o in orders if o["platform"] == q_platform]
+
+    pending = [o for o in orders if o["status"] == "pending"]
     packed  = [o for o in orders if o["status"] == "packed"]
 
     col_left, col_right = st.columns(2)
 
     with col_left:
-        st.markdown(f"#### 🟡 Chưa đóng gói ({len(pending)})")
+        st.markdown(f"#### 🟡 Chờ xử lý ({len(pending)})")
         st.divider()
         if not pending:
             st.info("Không có đơn nào đang chờ.")
         for o in pending:
-            badge = "🔵 Đang đóng" if o["status"] == "packing" else "🟡 Chờ xử lý"
             with st.container(border=True):
-                st.markdown(f"**`{o['tracking_code']}`** &nbsp; {badge}",
+                st.markdown(f"**`{o['tracking_code']}`** &nbsp; 🟡 Chờ xử lý",
                             unsafe_allow_html=True)
                 st.caption(
                     f"👤 {o['customer_name'] or '—'} &nbsp;|&nbsp; "
                     f"🛒 {o['platform'] or '—'} &nbsp;|&nbsp; "
                     f"📦 {o['item_count']} sản phẩm"
                 )
+                if is_admin:
+                    _render_delete_order_btn(o)
 
     with col_right:
-        st.markdown(f"#### 🟢 Đã đóng gói ({len(packed)})")
+        st.markdown(f"#### 🟢 Đã đóng ({len(packed)})")
         st.divider()
         if not packed:
             st.info("Chưa có đơn nào hoàn thành.")
@@ -537,6 +747,13 @@ def page_orders():
                     f"🛒 {o['platform'] or '—'} &nbsp;|&nbsp; "
                     f"📦 {o['item_count']} sản phẩm"
                 )
+                if is_admin:
+                    bc1, bc2 = st.columns(2)
+                    if bc1.button("↩ Reset", key=f"rst_{o['order_id']}", help="Đặt lại về Chờ xử lý"):
+                        update_order_status(o["tracking_code"], "pending")
+                        st.rerun()
+                    with bc2:
+                        _render_delete_order_btn(o)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -544,27 +761,27 @@ def page_orders():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def page_session():
-    st.markdown("### 📊 Ca làm việc")
-    user = st.session_state.user
+    user         = st.session_state.user
+    selected_day = st.date_input("Chọn ngày", value=date.today(), max_value=date.today())
+    render_page_header("📊", "Ca làm việc", f"Ngày {selected_day.strftime('%d/%m/%Y')}")
 
-    videos = search_videos(user_id=user["user_id"],
-                            date_from=date.today().isoformat(),
-                            date_to=date.today().isoformat())
-    total = len(videos)
+    day_str = selected_day.isoformat()
+    videos  = search_videos(user_id=user["user_id"], date_from=day_str, date_to=day_str)
+    total     = len(videos)
     total_sec = sum(v["duration_sec"] or 0 for v in videos)
-    avg_sec = (total_sec // total) if total else 0
+    avg_sec   = (total_sec // total) if total else 0
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Kiện đã đóng hôm nay", total)
-    c2.metric("Tổng thời gian ghi",
-              f"{total_sec // 60}m {total_sec % 60}s")
-    c3.metric("Thời gian TB / kiện",
-              f"{avg_sec // 60}m {avg_sec % 60}s")
+    render_metrics(
+        ("📦", total,                               "Kiện đã đóng",        "green"),
+        ("⏱️", f"{total_sec//60}m {total_sec%60}s", "Tổng thời gian ghi",  "blue"),
+        ("⌛", f"{avg_sec//60}m {avg_sec%60}s",     "Thời gian TB / kiện", "amber"),
+    )
 
     st.divider()
-    st.markdown("#### Video đã ghi hôm nay")
+    st.markdown(f"#### Video đã ghi ngày {selected_day.strftime('%d/%m/%Y')}")
     if not videos:
-        st.info("Chưa có video nào được ghi trong ca này.")
+        st.info("Chưa có video nào được ghi trong ngày này.")
+        render_footer()
         return
 
     for v in videos:
@@ -581,6 +798,7 @@ def page_session():
                         mime="video/mp4",
                         key=f"dl_{v['video_id']}"
                     )
+    render_footer()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -588,18 +806,19 @@ def page_session():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def page_admin_dashboard():
-    st.markdown("### 📊 Dashboard quản trị")
+    render_page_header("📊", "Dashboard", "Tổng quan hoạt động hôm nay")
     today = date.today().isoformat()
     videos_today = search_videos(date_from=today, date_to=today)
     emps          = get_all_employees()
     stats         = get_stats_by_employee(today)
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Tổng kiện hôm nay",   len(videos_today))
-    c2.metric("Nhân viên",            len(emps))
     total_gb = sum(v["file_size_mb"] or 0 for v in videos_today) / 1024
-    c3.metric("Dung lượng hôm nay",   f"{total_gb:.2f} GB")
-    c4.metric("Video đã lưu (tổng)", len(search_videos(limit=9999)))
+
+    render_metrics(
+        ("📦", len(videos_today),             "Kiện đóng gói hôm nay",  "green"),
+        ("👥", len(emps),                     "Nhân viên",               "blue"),
+        ("💾", f"{total_gb:.2f} GB",          "Dung lượng hôm nay",     "amber"),
+        ("🎥", len(search_videos(limit=9999)),"Tổng video đã lưu",      "purple"),
+    )
 
     st.divider()
     st.markdown("#### Năng suất nhân viên hôm nay")
@@ -614,6 +833,7 @@ def page_admin_dashboard():
             col_num.write(f"**{packed}** kiện")
     else:
         st.info("Chưa có dữ liệu hôm nay.")
+    render_footer()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -621,7 +841,7 @@ def page_admin_dashboard():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def page_video_management():
-    st.markdown("### 🎥 Quản lý video bằng chứng")
+    render_page_header("🎥", "Quản lý video", "Tìm kiếm và tải xuống video bằng chứng")
 
     with st.expander("🔍 Bộ lọc tìm kiếm", expanded=True):
         f1, f2, f3, f4 = st.columns(4)
@@ -645,6 +865,7 @@ def page_video_management():
 
     if not videos:
         st.info("Không có video nào phù hợp với bộ lọc.")
+        render_footer()
         return
 
     for v in videos:
@@ -660,6 +881,7 @@ def page_video_management():
                     st.download_button("⬇", data=f, file_name=v["file_name"],
                                        mime="video/mp4", key=f"dl2_{v['video_id']}")
         st.divider()
+    render_footer()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -667,7 +889,7 @@ def page_video_management():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def page_employees():
-    st.markdown("### 👥 Quản lý nhân viên")
+    render_page_header("👥", "Quản lý nhân viên", "Thêm, xóa và cấp lại mật khẩu nhân viên")
 
     tab_list, tab_add, tab_pwd = st.tabs(["Danh sách", "Thêm nhân viên", "Đổi mật khẩu"])
 
@@ -720,6 +942,7 @@ def page_employees():
                 st.success(f"Đã cập nhật mật khẩu cho {sel_emp}.")
             else:
                 st.warning("Vui lòng chọn nhân viên và nhập mật khẩu mới.")
+    render_footer()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -727,7 +950,7 @@ def page_employees():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def page_stats():
-    st.markdown("### 📈 Thống kê & báo cáo")
+    render_page_header("📈", "Thống kê & Báo cáo", "Phân tích năng suất nhân viên theo khoảng thời gian")
 
     try:
         import plotly.express as px
@@ -736,11 +959,20 @@ def page_stats():
     except ImportError:
         HAS_PLOTLY = False
 
-    sel_date = st.date_input("Chọn ngày", value=date.today())
-    stats = get_stats_by_employee(str(sel_date))
+    col_f, col_t = st.columns(2)
+    date_from = col_f.date_input("Từ ngày", value=date.today())
+    date_to   = col_t.date_input("Đến ngày", value=date.today())
+
+    if date_from > date_to:
+        st.warning("Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc.")
+        render_footer()
+        return
+
+    stats = get_stats_by_employee(str(date_from), str(date_to))
 
     if not stats:
         st.info("Không có dữ liệu cho ngày này.")
+        render_footer()
         return
 
     names  = [s["full_name"] for s in stats]
@@ -766,6 +998,7 @@ def page_stats():
             st.plotly_chart(fig2, use_container_width=True)
         else:
             st.bar_chart(dict(zip(names, avg_s)))
+    render_footer()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -791,6 +1024,8 @@ def main():
     else:
         if "Dashboard" in page:
             page_admin_dashboard()
+        elif "Đơn hàng" in page:
+            page_orders()
         elif "video" in page.lower():
             page_video_management()
         elif "Nhân viên" in page:
