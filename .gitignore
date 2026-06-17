@@ -1,5 +1,4 @@
 venv/
-data/packevidence.db
 videos/
 __pycache__/
 *.pyc
