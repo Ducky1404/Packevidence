@@ -63,7 +63,7 @@ st.markdown("""
         --surface:      #FFFFFF;
         --border:       #E5E7EB;
         --text-pri:     #111827;
-        --text-sec:     #6B7280;
+        --text-sec:     #111827;
     }
 
     /* ── SIDEBAR ─────────────────────────────── */
@@ -77,9 +77,13 @@ st.markdown("""
     [data-testid="stSidebar"] h2,
     [data-testid="stSidebar"] h3 { color: #ffffff !important; }
     [data-testid="stSidebar"] hr  { border-color: rgba(255,255,255,0.18) !important; }
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] div { color: rgba(255,255,255,0.9) !important; }
     /* Chỉ style text của radio option, không đụng vào cấu trúc */
     [data-testid="stSidebar"] [data-testid="stRadio"] label span {
-        color: rgba(255,255,255,0.85) !important;
+        color: rgba(255,255,255,0.9) !important;
         font-size: 0.9rem;
     }
     [data-testid="stSidebar"] [data-testid="stRadio"] label {
@@ -151,16 +155,20 @@ st.markdown("""
     .warn-box { background: var(--amber-light); border: 1px solid #EF9F27; border-radius: 8px; padding: 10px 14px; color: #854F0B; }
     .err-box  { background: var(--red-light);   border: 1px solid #F09595; border-radius: 8px; padding: 10px 14px; color: #A32D2D; }
 
+    /* ── CAPTION ─────────────────────────────── */
+    [data-testid="stCaptionContainer"] p,
+    [data-testid="stCaptionContainer"] { color: #111827 !important; font-weight: 600 !important; }
+
     /* ── FOOTER ───────────────────────────────── */
     .app-footer {
         text-align: center;
         padding: 2rem 0 0.5rem;
-        color: #9CA3AF;
+        color: #374151;
         font-size: 0.76rem;
         border-top: 1px solid var(--border);
         margin-top: 3rem;
     }
-    .app-footer strong { color: #6B7280; }
+    .app-footer strong { color: #111827; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -359,7 +367,7 @@ def render_sidebar():
         <div style="text-align:center;padding:1.8rem 0 1.2rem;">
             <div style="font-size:2.8rem;line-height:1;">📦</div>
             <div style="color:#ffffff;font-weight:700;font-size:1.1rem;margin-top:0.4rem;letter-spacing:-0.3px;">PackEvidence</div>
-            <div style="color:rgba(255,255,255,0.4);font-size:0.72rem;margin-top:0.1rem;">Hệ thống giám sát đóng gói</div>
+            <div style="color:rgba(255,255,255,0.78);font-size:0.72rem;margin-top:0.1rem;">Hệ thống giám sát đóng gói</div>
         </div>""", unsafe_allow_html=True)
 
         st.divider()
@@ -372,7 +380,7 @@ def render_sidebar():
             </div>
             <div>
                 <div style="color:#ffffff;font-weight:600;font-size:0.88rem;line-height:1.3;">{user['full_name']}</div>
-                <div style="color:rgba(255,255,255,0.45);font-size:0.72rem;">{user['employee_code'] or 'Admin'} · {role_label}</div>
+                <div style="color:rgba(255,255,255,0.78);font-size:0.72rem;">{user['employee_code'] or 'Admin'} · {role_label}</div>
             </div>
         </div>""", unsafe_allow_html=True)
 
@@ -725,10 +733,12 @@ def page_orders():
             with st.container(border=True):
                 st.markdown(f"**`{o['tracking_code']}`** &nbsp; 🟡 Chờ xử lý",
                             unsafe_allow_html=True)
-                st.caption(
+                st.markdown(
+                    f"<p style='color:#111827;font-size:0.82rem;margin:0.15rem 0 0;'>"
                     f"👤 {o['customer_name'] or '—'} &nbsp;|&nbsp; "
                     f"🛒 {o['platform'] or '—'} &nbsp;|&nbsp; "
-                    f"📦 {o['item_count']} sản phẩm"
+                    f"📦 {o['item_count']} sản phẩm</p>",
+                    unsafe_allow_html=True
                 )
                 if is_admin:
                     _render_delete_order_btn(o)
@@ -742,10 +752,12 @@ def page_orders():
             with st.container(border=True):
                 st.markdown(f"**`{o['tracking_code']}`** &nbsp; 🟢 Đã đóng",
                             unsafe_allow_html=True)
-                st.caption(
+                st.markdown(
+                    f"<p style='color:#111827;font-size:0.82rem;margin:0.15rem 0 0;'>"
                     f"👤 {o['customer_name'] or '—'} &nbsp;|&nbsp; "
                     f"🛒 {o['platform'] or '—'} &nbsp;|&nbsp; "
-                    f"📦 {o['item_count']} sản phẩm"
+                    f"📦 {o['item_count']} sản phẩm</p>",
+                    unsafe_allow_html=True
                 )
                 if is_admin:
                     bc1, bc2 = st.columns(2)
@@ -860,7 +872,7 @@ def page_video_management():
     )
 
     total_size = sum(v["file_size_mb"] or 0 for v in videos)
-    st.caption(f"Tìm thấy **{len(videos)}** video — tổng {total_size:.1f} MB")
+    st.markdown(f"<p style='color:#111827;font-size:0.82rem;'>Tìm thấy <strong>{len(videos)}</strong> video — tổng {total_size:.1f} MB</p>", unsafe_allow_html=True)
     st.divider()
 
     if not videos:
@@ -872,9 +884,9 @@ def page_video_management():
         c1, c2, c3 = st.columns([3, 2, 1])
         with c1:
             st.markdown(f"**`{v['tracking_code']}`** — {v['full_name']}")
-            st.caption(f"{v['start_time']}  |  {v['duration_sec']}s  |  {v['file_size_mb']} MB")
+            st.markdown(f"<p style='color:#111827;font-size:0.82rem;margin:0.1rem 0;'>{v['start_time']}  |  {v['duration_sec']}s  |  {v['file_size_mb']} MB</p>", unsafe_allow_html=True)
         with c2:
-            st.caption(f"📁 {v['file_name']}")
+            st.markdown(f"<p style='color:#111827;font-size:0.82rem;margin:0.1rem 0;'>📁 {v['file_name']}</p>", unsafe_allow_html=True)
         with c3:
             if os.path.exists(v["file_path"]):
                 with open(v["file_path"], "rb") as f:
@@ -898,7 +910,7 @@ def page_employees():
         for e in emps:
             col1, col2, col3, col4 = st.columns([3, 2, 1, 1])
             col1.markdown(f"**{e['full_name']}** (`{e['username']}`)")
-            col2.caption(f"{e['employee_code']} | Tạo: {e['created_at'][:10]}")
+            col2.markdown(f"<p style='color:#111827;font-size:0.82rem;margin:0.1rem 0;'>{e['employee_code']} | Tạo: {e['created_at'][:10]}</p>", unsafe_allow_html=True)
             is_active = bool(e["is_active"])
             col3.markdown("🟢 Hoạt động" if is_active else "⚫ Vô hiệu")
             if col4.button("Xóa", key=f"del_{e['user_id']}", type="secondary"):
@@ -928,20 +940,55 @@ def page_employees():
                 st.warning("Vui lòng điền đầy đủ thông tin.")
 
     with tab_pwd:
-        st.markdown("#### Reset mật khẩu")
+        st.markdown("#### Đổi mật khẩu nhân viên")
         emps    = get_all_employees()
-        emp_map = {e["full_name"]: e["user_id"] for e in emps}
-        with st.form("pwd_form", clear_on_submit=True):
-            sel_emp = st.selectbox("Chọn nhân viên", list(emp_map.keys()))
-            new_pw  = st.text_input("Mật khẩu mới", type="password")
-            pwd_submitted = st.form_submit_button("Cập nhật mật khẩu")
+        emp_map = {e["full_name"]: e for e in emps}
 
-        if pwd_submitted:
-            if sel_emp and new_pw:
-                reset_password(emp_map[sel_emp], new_pw)
-                st.success(f"Đã cập nhật mật khẩu cho {sel_emp}.")
-            else:
-                st.warning("Vui lòng chọn nhân viên và nhập mật khẩu mới.")
+        sel_emp_name = st.selectbox("Chọn nhân viên", list(emp_map.keys()), key="pwd_emp_sel")
+
+        if sel_emp_name:
+            emp = emp_map[sel_emp_name]
+            st.markdown(f"""
+            <div style="background:#f0faf5;border:1px solid #a0d9b4;border-radius:10px;
+                        padding:0.75rem 1.2rem;margin:0.4rem 0 1rem;">
+                <div style="font-size:0.72rem;color:#2d6a4f;font-weight:700;
+                            letter-spacing:0.05em;margin-bottom:0.45rem;">THÔNG TIN TÀI KHOẢN</div>
+                <div style="display:flex;gap:2rem;">
+                    <div>
+                        <span style="color:#6b7280;font-size:0.8rem;">Tên đăng nhập</span><br>
+                        <strong style="color:#111827;font-size:0.95rem;">{emp['username']}</strong>
+                    </div>
+                    <div>
+                        <span style="color:#6b7280;font-size:0.8rem;">Mã nhân viên</span><br>
+                        <strong style="color:#111827;font-size:0.95rem;">{emp['employee_code'] or '—'}</strong>
+                    </div>
+                    <div>
+                        <span style="color:#6b7280;font-size:0.8rem;">Họ và tên</span><br>
+                        <strong style="color:#111827;font-size:0.95rem;">{emp['full_name']}</strong>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            with st.form("pwd_form", clear_on_submit=True):
+                col_a, col_b = st.columns(2)
+                new_pw  = col_a.text_input("🔑 Mật khẩu mới", type="password",
+                                           placeholder="Nhập mật khẩu mới...")
+                conf_pw = col_b.text_input("✅ Xác nhận mật khẩu mới", type="password",
+                                           placeholder="Nhập lại mật khẩu mới...")
+                pwd_submitted = st.form_submit_button("Cập nhật mật khẩu",
+                                                      type="primary", use_container_width=True)
+
+            if pwd_submitted:
+                if not all([new_pw, conf_pw]):
+                    st.warning("Vui lòng điền đầy đủ tất cả các trường.")
+                elif new_pw != conf_pw:
+                    st.error("❌ Mật khẩu mới và xác nhận không khớp.")
+                elif len(new_pw) < 6:
+                    st.warning("Mật khẩu mới phải có ít nhất 6 ký tự.")
+                else:
+                    reset_password(emp["user_id"], new_pw)
+                    st.success(f"✅ Đã đổi mật khẩu cho **{sel_emp_name}** thành công.")
     render_footer()
 
 

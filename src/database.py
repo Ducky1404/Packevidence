@@ -525,3 +525,14 @@ def reset_password(user_id: int, new_password: str):
     )
     conn.commit()
     conn.close()
+
+
+def check_password(user_id: int, password: str) -> bool:
+    """Kiểm tra mật khẩu hiện tại của một user."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT 1 FROM users WHERE user_id = ? AND password = ?",
+        (user_id, hash_password(password))
+    ).fetchone()
+    conn.close()
+    return row is not None
