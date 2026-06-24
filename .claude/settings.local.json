@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "PowerShell(Start-Sleep -Seconds 5; try { $r = Invoke-WebRequest -Uri \"http://localhost:8501\" -UseBasicParsing -TimeoutSec 5; \"HTTP $\\($r.StatusCode\\) — App đang chạy!\" } catch { \"Lỗi: $_\" })"
-    ]
-  }
-}

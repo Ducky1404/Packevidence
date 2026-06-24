@@ -1,8 +1,3 @@
-"""
-barcode_detector.py — Module nhận diện mã vạch thời gian thực
-Sử dụng OpenCV + pyzbar để phát hiện và giải mã Barcode/QR Code từ camera.
-"""
-
 import cv2
 import time
 import numpy as np
@@ -152,7 +147,7 @@ class BarcodeDetector:
         """
         Vẽ khung xanh và thông tin mã vận đơn lên frame để hiển thị cho người dùng.
         """
-        if result.polygon and len(result.polygon) == 4:
+        if result.polygon and len(result.polygon) >= 3:
             pts = np.array(result.polygon, dtype=np.int32)
             cv2.polylines(frame, [pts], True, (0, 200, 100), 2)
 
