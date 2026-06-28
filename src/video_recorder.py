@@ -82,6 +82,9 @@ class VideoRecorder:
             self._file_path, fourcc, self.FPS_OUT, self.RESOLUTION
         )
 
+        if not self._writer.isOpened():
+            return ""
+
         self._recording = True
         self._thread = threading.Thread(target=self._record_loop, daemon=True)
         self._thread.start()
@@ -142,6 +145,7 @@ class VideoRecorder:
 
             ret, frame = self._cap.read()
             if not ret:
+                self._recording = False
                 break
 
             frame = self._add_watermark(frame)
