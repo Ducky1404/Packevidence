@@ -139,13 +139,12 @@ def init_db():
     cur.execute("SELECT COUNT(*) FROM orders")
     if cur.fetchone()[0] == 0:
         sample_orders = [
-            # ── Đã đóng gói (packed) ──────────────────────────────────────────
-            ("SP260516-00101", "Nguyễn Văn An",    "Shopee", "packed", [
+            ("SP260516-00101", "Nguyễn Văn An",    "Shopee", "pending", [
                 ("Áo thun nam oversize trắng", 2),
                 ("Quần short kaki be", 1),
                 ("Túi zip chống ẩm", 3),
             ]),
-            ("LZ260516-00201", "Trần Thị Hương",   "Lazada", "packed", [
+            ("LZ260516-00201", "Trần Thị Hương",   "Lazada", "pending", [
                 ("Giày thể thao Nike Air Force 1", 1),
                 ("Tất thể thao (cặp)", 2),
                 ("Hộp đựng giày + gói hút ẩm", 1),
