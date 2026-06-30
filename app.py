@@ -702,7 +702,7 @@ def page_orders():
                         products = [p for p in products_raw.splitlines() if p.strip()]
                         ok, msg  = add_order(new_code, new_customer, new_platform, products)
                         if ok:
-                            st.success(msg)
+                            st.toast(msg, icon="✅")
                             st.rerun()
                         else:
                             st.error(msg)
